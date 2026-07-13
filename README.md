@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Hyde Flip Books
 
-## Getting Started
+Upload a PDF, note the client, and get a polished, trackable online flip book
+plus a one-click "Copy for Gmail" share block. Built to run on **free tiers**.
 
-First, run the development server:
+## How it works
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **Upload** (admin): the PDF is rendered to per-page WebP images **in your
+  browser** (pdf.js). The original PDF is never uploaded or hosted, so there's
+  nothing straightforward for a client to download.
+- **Storage**: page images live in **Vercel Blob**; book metadata + analytics in
+  **Neon Postgres**. Page images are streamed to viewers through
+  `/api/book/<slug>/page/<n>`, so the real storage URLs are never exposed.
+- **Viewer** (`/b/<slug>`): a real page-curl flip book (`page-flip`) — two-page
+  spread on desktop, single page on mobile.
+- **Sharing**: the admin book page renders a book-styled email thumbnail and a
+  **Copy for Gmail** button that puts a clickable image + link on your clipboard.
+  (Email clients strip JS/iframes, so the live flip can't run *inside* the email —
+  the image links out to the full experience. This is the richest thing Gmail keeps.)
+- **Analytics**: every view and the deepest page reached is recorded per visitor;
+  see it on each book's page.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Tech
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Next.js 16 (App Router) · Neon Postgres · Vercel Blob · pdf.js · page-flip · jose.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Local development
 
-## Learn More
+1. `cp .env.example .env.local` and fill in the four required values.
+2. (Optional) `node --env-file=.env.local scripts/init-db.mjs` to create tables
+   up front — the app also creates them lazily on first use.
+3. `npm run dev` → http://localhost:3000
 
-To learn more about Next.js, take a look at the following resources:
+## Deploy to Vercel (free)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. **Neon**: Vercel dashboard → Storage → create a Neon Postgres store. Copy the
+   pooled connection string into `DATABASE_URL`.
+2. **Blob**: Vercel dashboard → Storage → create a Blob store (auto-wires
+   `BLOB_READ_WRITE_TOKEN` in the project).
+3. **Env vars**: set `ADMIN_PASSWORD` and `SESSION_SECRET`
+   (`openssl rand -base64 32`) in Project → Settings → Environment Variables.
+4. Push the repo and import it in Vercel, or run `vercel --prod`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Cost at ~300 PDFs/year
 
-## Deploy on Vercel
+Comfortably within free tiers. ~300 books × ~20 pages × ~120 KB ≈ **~700 MB** of
+Blob (free tier is 1 GB+), Neon rows are tiny, and traffic is low. Expected: **$0**.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Environment variables
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | ✅ | Neon Postgres connection string |
+| `BLOB_READ_WRITE_TOKEN` | ✅ | Vercel Blob (auto on Vercel) |
+| `ADMIN_PASSWORD` | ✅ | Single shared admin login |
+| `SESSION_SECRET` | ✅ | Signs session cookie + hashes visitor IPs |
+| `NEXT_PUBLIC_BASE_URL` | — | Override share-link origin |
+
+## Notes on "not downloadable"
+
+This is deliberately *light* protection, per the brief: no raw PDF is ever
+served; images are proxied (real Blob URLs hidden); right-click and image drag
+are disabled in the viewer. A determined user can still screenshot — that's fine.
