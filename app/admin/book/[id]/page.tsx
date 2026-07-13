@@ -6,6 +6,7 @@ import { dateTime, timeAgo } from "@/lib/format";
 import { deviceOf } from "@/lib/device";
 import { SharePanel } from "./SharePanel";
 import { DeleteButton } from "./DeleteButton";
+import { AutoRefresh } from "../../AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -15,46 +16,46 @@ async function getData(id: string) {
   if (bookRows.length === 0) return null;
   const book = bookRows[0];
 
-  const summaryRows = await sql`
-    SELECT
-      COUNT(*) FILTER (WHERE type = 'view') AS views,
-      COUNT(DISTINCT session_id)            AS sessions,
-      MAX(max_depth)                        AS deepest_page,
-      ROUND(AVG(max_depth)::numeric, 1)     AS avg_depth
-    FROM events WHERE book_id = ${id}
-  `;
-
-  const recipients = await sql`
-    SELECT
-      r.id, r.name, r.token, r.created_at,
-      COUNT(e.*) FILTER (WHERE e.type = 'view') AS views,
-      MAX(e.max_depth)                          AS max_depth,
-      MAX(e.created_at)                         AS last_seen
-    FROM recipients r
-    LEFT JOIN events e ON e.recipient_id = r.id
-    WHERE r.book_id = ${id}
-    GROUP BY r.id
-    ORDER BY r.created_at DESC
-  `;
-
-  // One row per (recipient, session/device).
-  const activity = await sql`
-    SELECT
-      e.session_id,
-      e.recipient_id,
-      r.name          AS recipient_name,
-      MIN(e.created_at) AS first_seen,
-      MAX(e.created_at) AS last_seen,
-      MAX(e.max_depth)  AS max_depth,
-      MAX(e.user_agent) AS user_agent,
-      MAX(e.country)    AS country
-    FROM events e
-    LEFT JOIN recipients r ON r.id = e.recipient_id
-    WHERE e.book_id = ${id}
-    GROUP BY e.session_id, e.recipient_id, r.name
-    ORDER BY MAX(e.created_at) DESC
-    LIMIT 500
-  `;
+  // Run the three analytics queries concurrently (one round trip, not three).
+  const [summaryRows, recipients, activity] = await Promise.all([
+    sql`
+      SELECT
+        COUNT(*) FILTER (WHERE type = 'view') AS views,
+        COUNT(DISTINCT session_id)            AS sessions,
+        MAX(max_depth)                        AS deepest_page,
+        ROUND(AVG(max_depth)::numeric, 1)     AS avg_depth
+      FROM events WHERE book_id = ${id}
+    `,
+    sql`
+      SELECT
+        r.id, r.name, r.token, r.created_at,
+        COUNT(e.*) FILTER (WHERE e.type = 'view') AS views,
+        MAX(e.max_depth)                          AS max_depth,
+        MAX(e.created_at)                         AS last_seen
+      FROM recipients r
+      LEFT JOIN events e ON e.recipient_id = r.id
+      WHERE r.book_id = ${id}
+      GROUP BY r.id
+      ORDER BY r.created_at DESC
+    `,
+    sql`
+      SELECT
+        e.session_id,
+        e.recipient_id,
+        r.name          AS recipient_name,
+        MIN(e.created_at) AS first_seen,
+        MAX(e.created_at) AS last_seen,
+        MAX(e.max_depth)  AS max_depth,
+        MAX(e.user_agent) AS user_agent,
+        MAX(e.country)    AS country
+      FROM events e
+      LEFT JOIN recipients r ON r.id = e.recipient_id
+      WHERE e.book_id = ${id}
+      GROUP BY e.session_id, e.recipient_id, r.name
+      ORDER BY MAX(e.created_at) DESC
+      LIMIT 500
+    `,
+  ]);
 
   return { book, summary: summaryRows[0], recipients, activity };
 }
@@ -96,6 +97,7 @@ export default async function BookPage({
 
   return (
     <div>
+      <AutoRefresh />
       <Link href="/admin" className="text-sm text-muted hover:text-ink">
         ← All books
       </Link>

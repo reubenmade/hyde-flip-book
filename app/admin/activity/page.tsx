@@ -2,6 +2,7 @@ import Link from "next/link";
 import { sql, ensureSchema } from "@/lib/db";
 import { dateTime } from "@/lib/format";
 import { deviceOf } from "@/lib/device";
+import { AutoRefresh } from "../AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,7 @@ export default async function ActivityPage() {
 
   return (
     <div>
+      <AutoRefresh />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-ink">All activity</h1>
