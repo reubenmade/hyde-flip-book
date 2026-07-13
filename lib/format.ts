@@ -1,3 +1,7 @@
+// Hyde is a NZ business — always present times in NZ local time, regardless of
+// where the server rendering the page happens to run.
+const TZ = "Pacific/Auckland";
+
 export function timeAgo(date: string | Date | null): string {
   if (!date) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
@@ -9,13 +13,19 @@ export function timeAgo(date: string | Date | null): string {
   if (h < 24) return `${h}h ago`;
   const days = Math.floor(h / 24);
   if (days < 30) return `${days}d ago`;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return d.toLocaleDateString("en-NZ", {
+    timeZone: TZ,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 export function dateTime(date: string | Date | null): string {
   if (!date) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleString(undefined, {
+  return d.toLocaleString("en-NZ", {
+    timeZone: TZ,
     month: "short",
     day: "numeric",
     hour: "numeric",

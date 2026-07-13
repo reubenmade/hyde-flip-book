@@ -21,7 +21,9 @@ function getSessionId(): string {
 export function ViewerClient({ slug, title, pageCount, token }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const flipRef = useRef<unknown>(null);
-  const maxDepthRef = useRef(1);
+  const maxDepthRef = useRef(1); // furthest page reached this visit
+  const sentDepthRef = useRef(1); // furthest page ever logged for this link
+  const depthTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionRef = useRef<string>("");
   const [ready, setReady] = useState(false);
   const [current, setCurrent] = useState(1);
@@ -62,8 +64,50 @@ export function ViewerClient({ slug, title, pageCount, token }: Props) {
     [slug, token]
   );
 
+  // Persist the furthest page ever logged for this specific link, so re-opening
+  // and scrolling to the same (or a shallower) page never logs a duplicate.
+  const depthKey = `hyde_depth_${token ?? slug}`;
+
+  // Debounced "furthest page reached" logger: waits until they stop flipping,
+  // then logs a single milestone only if it's deeper than anything logged before.
+  const flushDepth = useCallback(() => {
+    if (depthTimerRef.current) {
+      clearTimeout(depthTimerRef.current);
+      depthTimerRef.current = null;
+    }
+    if (maxDepthRef.current > sentDepthRef.current) {
+      sentDepthRef.current = maxDepthRef.current;
+      try {
+        localStorage.setItem(depthKey, String(sentDepthRef.current));
+      } catch {
+        /* ignore */
+      }
+      track("progress", sentDepthRef.current);
+    }
+  }, [track, depthKey]);
+
+  const scheduleDepth = useCallback(
+    (page: number) => {
+      if (page > maxDepthRef.current) maxDepthRef.current = page;
+      if (maxDepthRef.current <= sentDepthRef.current) return;
+      if (depthTimerRef.current) clearTimeout(depthTimerRef.current);
+      depthTimerRef.current = setTimeout(flushDepth, 1500);
+    },
+    [flushDepth]
+  );
+
   useEffect(() => {
     sessionRef.current = getSessionId();
+    // Seed the "already logged" depth from a previous visit (min 1 = the cover,
+    // so page-1 flips never count as progress).
+    try {
+      sentDepthRef.current = Math.max(
+        1,
+        parseInt(localStorage.getItem(depthKey) ?? "1", 10) || 1
+      );
+    } catch {
+      /* ignore */
+    }
     let flip: { destroy: () => void } | null = null;
     let disposed = false;
 
@@ -105,12 +149,9 @@ export function ViewerClient({ slug, title, pageCount, token }: Props) {
       pf.on("flip", (e: { data: number }) => {
         const page = e.data + 1; // 0-indexed -> 1-indexed
         setCurrent(page);
-        // Only log a milestone when they reach a NEW deepest page — keeps the
-        // activity stream meaningful instead of one row per page turn.
-        if (page > maxDepthRef.current) {
-          maxDepthRef.current = page;
-          track("progress", page);
-        }
+        // Debounced: logs one "reached page N" once they settle, and only if it
+        // beats the deepest page ever logged for this link.
+        scheduleDepth(page);
       });
 
       pf.loadFromImages(pageUrls);
@@ -145,6 +186,20 @@ export function ViewerClient({ slug, title, pageCount, token }: Props) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // Flush any pending depth milestone if they leave before the debounce fires.
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flushDepth();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", flushDepth);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", flushDepth);
+      if (depthTimerRef.current) clearTimeout(depthTimerRef.current);
+    };
+  }, [flushDepth]);
 
   return (
     <div
