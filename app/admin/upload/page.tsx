@@ -21,7 +21,6 @@ type Phase = "idle" | "rendering" | "uploading" | "finalizing" | "done" | "error
 export default function UploadPage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
-  const [client, setClient] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState({ done: 0, total: 0 });
@@ -54,7 +53,7 @@ export default function UploadPage() {
       const createRes = await fetch("/api/books", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title: title.trim(), clientName: client.trim() }),
+        body: JSON.stringify({ title: title.trim() }),
       });
       if (!createRes.ok) throw new Error("Could not create book record.");
       const { book } = await createRes.json();
@@ -121,23 +120,18 @@ export default function UploadPage() {
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-5">
         <div>
-          <label className="block text-sm font-medium text-ink">Title</label>
+          <label className="block text-sm font-medium text-ink">
+            Document name
+          </label>
+          <p className="text-xs text-muted mt-0.5">
+            e.g. the suburb or property. You&apos;ll add recipients &amp; their
+            share links on the next screen.
+          </p>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             disabled={busy}
-            placeholder="Spring 2026 Lookbook"
-            className="mt-1.5 w-full rounded-lg border border-line bg-white px-4 py-2.5 text-ink outline-none focus:border-accent disabled:opacity-60"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-ink">Client name</label>
-          <input
-            value={client}
-            onChange={(e) => setClient(e.target.value)}
-            disabled={busy}
-            placeholder="Acme Co."
+            placeholder="Wigram"
             className="mt-1.5 w-full rounded-lg border border-line bg-white px-4 py-2.5 text-ink outline-none focus:border-accent disabled:opacity-60"
           />
         </div>

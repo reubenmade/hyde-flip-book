@@ -102,7 +102,7 @@ export default async function AdminDashboard() {
                   )}
                 </div>
                 <div className="truncate text-sm text-muted">
-                  {b.client_name || "No client set"} · {b.page_count} pages
+                  {b.page_count} pages
                 </div>
               </div>
               <div className="hidden sm:block text-right">

@@ -2,32 +2,27 @@ import Link from "next/link";
 import { sql, ensureSchema } from "@/lib/db";
 import { dateTime } from "@/lib/format";
 import { deviceOf } from "@/lib/device";
+import { actionText } from "@/lib/activity";
 import { AutoRefresh } from "../AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
-async function getActivity() {
+async function getStream() {
   await ensureSchema();
-  // One row per (book, recipient, session/device), newest first.
   return sql`
-    SELECT
-      b.id AS book_id, b.title AS book_title, b.page_count,
-      e.recipient_id, r.name AS recipient_name,
-      e.session_id,
-      MAX(e.max_depth)  AS max_depth,
-      MAX(e.created_at) AS last_seen,
-      MAX(e.user_agent) AS user_agent
+    SELECT e.type, e.page, e.created_at, e.user_agent,
+           b.id AS book_id, b.title AS book_title,
+           r.name AS recipient_name
     FROM events e
     JOIN books b ON b.id = e.book_id
     LEFT JOIN recipients r ON r.id = e.recipient_id
-    GROUP BY b.id, b.title, b.page_count, e.recipient_id, r.name, e.session_id
-    ORDER BY MAX(e.created_at) DESC
+    ORDER BY e.created_at DESC
     LIMIT 500
   `;
 }
 
 export default async function ActivityPage() {
-  const rows = await getActivity();
+  const stream = await getStream();
 
   return (
     <div>
@@ -36,7 +31,7 @@ export default async function ActivityPage() {
         <div>
           <h1 className="text-2xl font-semibold text-ink">All activity</h1>
           <p className="text-sm text-muted mt-1">
-            Every open across all documents and recipients, most recent first.
+            Every open and page-depth milestone across all documents, live.
           </p>
         </div>
         <Link href="/admin" className="text-sm text-muted hover:text-ink">
@@ -44,61 +39,47 @@ export default async function ActivityPage() {
         </Link>
       </div>
 
-      {rows.length === 0 ? (
+      {stream.length === 0 ? (
         <div className="mt-10 rounded-2xl border border-dashed border-line p-12 text-center text-muted">
           No activity yet.
         </div>
       ) : (
-        <div className="mt-6 overflow-x-auto rounded-xl border border-line">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-line bg-paper text-left text-xs uppercase text-muted">
-                <th className="px-4 py-2.5 font-medium">Who</th>
-                <th className="px-4 py-2.5 font-medium">Document</th>
-                <th className="px-4 py-2.5 font-medium">Reached</th>
-                <th className="px-4 py-2.5 font-medium">Device</th>
-                <th className="px-4 py-2.5 font-medium">When</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((a: Record<string, unknown>, i: number) => {
-                const depth = Number(a.max_depth ?? 0);
-                const pageCount = Number(a.page_count ?? 0);
-                const dpct = pageCount ? Math.round((depth / pageCount) * 100) : 0;
-                const who = (a.recipient_name as string) || "Direct link";
-                return (
-                  <tr key={i} className="border-b border-line/60 last:border-0">
-                    <td className="px-4 py-3 font-medium text-ink">{who}</td>
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/admin/book/${a.book_id}`}
-                        className="text-accent hover:underline"
-                      >
-                        {a.book_title as string}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 w-16 overflow-hidden rounded-full bg-line">
-                          <div className="h-full bg-accent" style={{ width: `${dpct}%` }} />
-                        </div>
-                        <span className="text-xs text-muted">
-                          pg {depth}/{pageCount}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-muted">
-                      {deviceOf(a.user_agent as string | null)}
-                    </td>
-                    <td className="px-4 py-3 text-muted">
-                      {dateTime(a.last_seen as string)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <ul className="mt-8 space-y-4">
+          {stream.map((e: Record<string, unknown>, i: number) => {
+            const who = (e.recipient_name as string) || "Someone (direct link)";
+            const isOpen = e.type === "view";
+            return (
+              <li key={i} className="flex gap-3">
+                <div className="mt-1.5 flex flex-col items-center">
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      isOpen ? "bg-accent" : "bg-ink/30"
+                    }`}
+                  />
+                  {i < stream.length - 1 && (
+                    <span className="mt-1 w-px flex-1 bg-line" />
+                  )}
+                </div>
+                <div className="pb-1">
+                  <p className="text-sm text-ink">
+                    <span className="font-medium">{who}</span>{" "}
+                    {actionText(e.type as string, e.page as number | null)} on{" "}
+                    <Link
+                      href={`/admin/book/${e.book_id}`}
+                      className="text-accent hover:underline"
+                    >
+                      {e.book_title as string}
+                    </Link>
+                  </p>
+                  <p className="text-xs text-muted">
+                    {dateTime(e.created_at as string)} ·{" "}
+                    {deviceOf(e.user_agent as string | null)}
+                  </p>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </div>
   );

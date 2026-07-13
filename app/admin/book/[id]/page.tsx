@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { sql, ensureSchema } from "@/lib/db";
 import { dateTime, timeAgo } from "@/lib/format";
 import { deviceOf } from "@/lib/device";
+import { actionText } from "@/lib/activity";
 import { SharePanel } from "./SharePanel";
 import { DeleteButton } from "./DeleteButton";
 import { AutoRefresh } from "../../AutoRefresh";
@@ -16,15 +17,17 @@ async function getData(id: string) {
   if (bookRows.length === 0) return null;
   const book = bookRows[0];
 
-  // Run the three analytics queries concurrently (one round trip, not three).
-  const [summaryRows, recipients, activity] = await Promise.all([
+  // Run the analytics queries concurrently.
+  const [summaryRows, recipients, stream] = await Promise.all([
     sql`
       SELECT
-        COUNT(*) FILTER (WHERE type = 'view') AS views,
-        COUNT(DISTINCT session_id)            AS sessions,
-        MAX(max_depth)                        AS deepest_page,
-        ROUND(AVG(max_depth)::numeric, 1)     AS avg_depth
-      FROM events WHERE book_id = ${id}
+        (SELECT COUNT(*) FROM events WHERE book_id = ${id} AND type = 'view') AS views,
+        (SELECT MAX(max_depth) FROM events WHERE book_id = ${id}) AS deepest_page,
+        (SELECT ROUND(AVG(sd)::numeric, 1) FROM (
+            SELECT MAX(max_depth) AS sd FROM events
+            WHERE book_id = ${id} AND max_depth IS NOT NULL
+            GROUP BY session_id, recipient_id
+         ) t) AS avg_depth
     `,
     sql`
       SELECT
@@ -38,26 +41,19 @@ async function getData(id: string) {
       GROUP BY r.id
       ORDER BY r.created_at DESC
     `,
+    // Chronological event stream — one row per open / new-depth milestone.
     sql`
-      SELECT
-        e.session_id,
-        e.recipient_id,
-        r.name          AS recipient_name,
-        MIN(e.created_at) AS first_seen,
-        MAX(e.created_at) AS last_seen,
-        MAX(e.max_depth)  AS max_depth,
-        MAX(e.user_agent) AS user_agent,
-        MAX(e.country)    AS country
+      SELECT e.type, e.page, e.max_depth, e.created_at, e.user_agent,
+             r.name AS recipient_name
       FROM events e
       LEFT JOIN recipients r ON r.id = e.recipient_id
       WHERE e.book_id = ${id}
-      GROUP BY e.session_id, e.recipient_id, r.name
-      ORDER BY MAX(e.created_at) DESC
-      LIMIT 500
+      ORDER BY e.created_at DESC
+      LIMIT 300
     `,
   ]);
 
-  return { book, summary: summaryRows[0], recipients, activity };
+  return { book, summary: summaryRows[0], recipients, stream };
 }
 
 export default async function BookPage({
@@ -68,13 +64,12 @@ export default async function BookPage({
   const { id } = await params;
   const data = await getData(id);
   if (!data) notFound();
-  const { book, summary, recipients, activity } = data;
+  const { book, summary, recipients, stream } = data;
 
   const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
   const proto = h.get("x-forwarded-proto") ?? "http";
   const origin = process.env.NEXT_PUBLIC_BASE_URL ?? `${proto}://${host}`;
-  const viewerBaseUrl = `${origin}/b/${book.slug}`;
 
   const pct =
     book.page_count > 0 && summary.avg_depth
@@ -106,8 +101,15 @@ export default async function BookPage({
         <div>
           <h1 className="text-2xl font-semibold text-ink">{book.title}</h1>
           <p className="mt-1 text-sm text-muted">
-            {book.client_name ? `${book.client_name} · ` : ""}
-            {book.page_count} pages · added {timeAgo(book.created_at)}
+            {book.page_count} pages · added {timeAgo(book.created_at)} ·{" "}
+            <a
+              href={`${origin}/b/${book.slug}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-accent hover:underline"
+            >
+              Preview (untracked) ↗
+            </a>
           </p>
         </div>
         <DeleteButton id={book.id} title={book.title} />
@@ -127,61 +129,41 @@ export default async function BookPage({
           </div>
 
           <h2 className="mt-8 font-semibold text-ink">Activity</h2>
-          {activity.length === 0 ? (
+          {stream.length === 0 ? (
             <p className="mt-3 text-sm text-muted">
               No opens yet. Add a recipient and share their link to start tracking.
             </p>
           ) : (
-            <div className="mt-3 overflow-x-auto rounded-xl border border-line">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-line bg-paper text-left text-xs uppercase text-muted">
-                    <th className="px-4 py-2.5 font-medium">Who</th>
-                    <th className="px-4 py-2.5 font-medium">Reached</th>
-                    <th className="px-4 py-2.5 font-medium">Device</th>
-                    <th className="px-4 py-2.5 font-medium">Last opened</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {activity.map((a: Record<string, unknown>, i: number) => {
-                    const depth = Number(a.max_depth ?? 0);
-                    const dpct = book.page_count
-                      ? Math.round((depth / book.page_count) * 100)
-                      : 0;
-                    const who = (a.recipient_name as string) || "Direct link";
-                    return (
-                      <tr key={i} className="border-b border-line/60 last:border-0">
-                        <td className="px-4 py-3">
-                          <div className="font-medium text-ink">{who}</div>
-                          {!a.recipient_name && (
-                            <div className="text-xs text-muted">no name attached</div>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-line">
-                              <div
-                                className="h-full bg-accent"
-                                style={{ width: `${dpct}%` }}
-                              />
-                            </div>
-                            <span className="text-xs text-muted">
-                              pg {depth}/{book.page_count}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-muted">
-                          {deviceOf(a.user_agent as string | null)}
-                        </td>
-                        <td className="px-4 py-3 text-muted">
-                          {dateTime(a.last_seen as string)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <ul className="mt-4 space-y-4">
+              {stream.map((e: Record<string, unknown>, i: number) => {
+                const who = (e.recipient_name as string) || "Someone (direct link)";
+                const isOpen = e.type === "view";
+                return (
+                  <li key={i} className="flex gap-3">
+                    <div className="mt-1.5 flex flex-col items-center">
+                      <span
+                        className={`h-2 w-2 rounded-full ${
+                          isOpen ? "bg-accent" : "bg-ink/30"
+                        }`}
+                      />
+                      {i < stream.length - 1 && (
+                        <span className="mt-1 w-px flex-1 bg-line" />
+                      )}
+                    </div>
+                    <div className="pb-1">
+                      <p className="text-sm text-ink">
+                        <span className="font-medium">{who}</span>{" "}
+                        {actionText(e.type as string, e.page as number | null)}
+                      </p>
+                      <p className="text-xs text-muted">
+                        {dateTime(e.created_at as string)} ·{" "}
+                        {deviceOf(e.user_agent as string | null)}
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </div>
 
@@ -190,7 +172,7 @@ export default async function BookPage({
           <SharePanel
             bookId={book.id}
             slug={book.slug}
-            viewerBaseUrl={viewerBaseUrl}
+            origin={origin}
             shareImageUrl={book.share_url}
             title={book.title}
             client={book.client_name}

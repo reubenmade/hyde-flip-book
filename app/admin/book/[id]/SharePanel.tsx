@@ -15,7 +15,7 @@ type Recipient = {
 export function SharePanel({
   bookId,
   slug,
-  viewerBaseUrl,
+  origin,
   shareImageUrl,
   title,
   client,
@@ -24,7 +24,7 @@ export function SharePanel({
 }: {
   bookId: string;
   slug: string;
-  viewerBaseUrl: string; // e.g. https://host/b/<slug>
+  origin: string; // e.g. https://host
   shareImageUrl: string | null;
   title: string;
   client: string;
@@ -61,7 +61,7 @@ export function SharePanel({
   }, [slug]);
 
   function linkFor(token: string) {
-    return `${viewerBaseUrl}?t=${token}`;
+    return `${origin}/v/${token}`;
   }
 
   function buildSnippetHtml(recipientName: string, url: string) {

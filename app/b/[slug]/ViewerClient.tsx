@@ -105,8 +105,12 @@ export function ViewerClient({ slug, title, pageCount, token }: Props) {
       pf.on("flip", (e: { data: number }) => {
         const page = e.data + 1; // 0-indexed -> 1-indexed
         setCurrent(page);
-        if (page > maxDepthRef.current) maxDepthRef.current = page;
-        track("progress", page);
+        // Only log a milestone when they reach a NEW deepest page — keeps the
+        // activity stream meaningful instead of one row per page turn.
+        if (page > maxDepthRef.current) {
+          maxDepthRef.current = page;
+          track("progress", page);
+        }
       });
 
       pf.loadFromImages(pageUrls);
@@ -127,17 +131,6 @@ export function ViewerClient({ slug, title, pageCount, token }: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Flush deepest depth when the tab is hidden/closed.
-  useEffect(() => {
-    const flush = () => track("progress", current);
-    document.addEventListener("visibilitychange", flush);
-    window.addEventListener("pagehide", flush);
-    return () => {
-      document.removeEventListener("visibilitychange", flush);
-      window.removeEventListener("pagehide", flush);
-    };
-  }, [track, current]);
 
   const prev = () =>
     (flipRef.current as { flipPrev?: () => void })?.flipPrev?.();
