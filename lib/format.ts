@@ -1,4 +1,4 @@
-// Hyde is a NZ business — always present times in NZ local time, regardless of
+// FlyppBook is run from NZ — always present times in NZ local time, regardless of
 // where the server rendering the page happens to run.
 const TZ = "Pacific/Auckland";
 

@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 function LoginForm() {
-  const router = useRouter();
   const params = useSearchParams();
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -17,16 +18,18 @@ function LoginForm() {
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ username, password }),
     });
-    setLoading(false);
     if (res.ok) {
-      router.push(params.get("next") || "/admin");
-      router.refresh();
-    } else {
-      const data = await res.json().catch(() => ({}));
-      setError(data.error || "Login failed.");
+      // Full-document navigation so the freshly set session cookie flows through
+      // middleware and the destination renders authenticated. A client-side
+      // router.push here can race the cookie and bounce back to /login.
+      window.location.assign(params.get("next") || "/admin");
+      return;
     }
+    setLoading(false);
+    const data = await res.json().catch(() => ({}));
+    setError(data.error || "Login failed.");
   }
 
   return (
@@ -36,17 +39,27 @@ function LoginForm() {
         className="w-full max-w-sm rounded-2xl bg-paper border border-line p-8 shadow-sm"
       >
         <div className="text-2xl font-semibold tracking-tight text-ink text-center">
-          Hyde<span className="text-accent">.</span>
+          Flypp<span className="text-accent">Book</span>
         </div>
-        <p className="mt-1 text-center text-sm text-muted">Admin sign in</p>
+        <p className="mt-1 text-center text-sm text-muted">Sign in</p>
 
         <input
-          type="password"
+          type="text"
           autoFocus
+          autoCapitalize="none"
+          autoComplete="username"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="Username"
+          className="mt-6 w-full rounded-lg border border-line bg-white px-4 py-3 text-ink outline-none focus:border-accent"
+        />
+        <input
+          type="password"
+          autoComplete="current-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Password"
-          className="mt-6 w-full rounded-lg border border-line bg-white px-4 py-3 text-ink outline-none focus:border-accent"
+          className="mt-3 w-full rounded-lg border border-line bg-white px-4 py-3 text-ink outline-none focus:border-accent"
         />
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
@@ -57,6 +70,12 @@ function LoginForm() {
         >
           {loading ? "Signing in…" : "Sign in"}
         </button>
+
+        <p className="mt-4 text-center text-sm">
+          <Link href="/admin/forgot" className="text-muted hover:text-ink transition">
+            Forgot password?
+          </Link>
+        </p>
       </form>
     </main>
   );

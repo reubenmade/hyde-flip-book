@@ -3,8 +3,8 @@ import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Hyde — Flip Books",
-  description: "Beautifully hosted flip books for Hyde clients.",
+  title: "FlyppBook",
+  description: "Beautifully hosted flip books for your clients.",
   robots: { index: false, follow: false },
 };
 

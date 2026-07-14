@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql, ensureSchema } from "@/lib/db";
 import { newSlug } from "@/lib/slug";
+import { authorizeBook } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -11,15 +12,13 @@ export async function POST(
 ) {
   await ensureSchema();
   const { id } = await params;
+  if (!(await authorizeBook(id))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   const body = await req.json().catch(() => ({}));
   const name = (body.name ?? "").toString().trim();
   if (!name) {
     return NextResponse.json({ error: "Name is required." }, { status: 400 });
-  }
-
-  const book = await sql`SELECT id FROM books WHERE id = ${id}`;
-  if (book.length === 0) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
   }
 
   const token = newSlug();

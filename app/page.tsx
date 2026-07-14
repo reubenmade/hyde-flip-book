@@ -5,7 +5,7 @@ export default function Home() {
     <main className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
       <div className="max-w-md">
         <div className="text-3xl font-semibold tracking-tight text-ink">
-          Hyde<span className="text-accent">.</span>
+          Flypp<span className="text-accent">Book</span>
         </div>
         <p className="mt-3 text-muted">
           Beautiful, trackable flip books for clients.

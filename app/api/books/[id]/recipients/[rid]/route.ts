@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql, ensureSchema } from "@/lib/db";
+import { authorizeBook } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,9 @@ export async function DELETE(
 ) {
   await ensureSchema();
   const { id, rid } = await params;
+  if (!(await authorizeBook(id))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   await sql`DELETE FROM recipients WHERE id = ${rid} AND book_id = ${id}`;
   return NextResponse.json({ ok: true });
 }

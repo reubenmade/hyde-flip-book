@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql, ensureSchema } from "@/lib/db";
+import { authorizeBook } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,9 @@ export async function POST(
 ) {
   await ensureSchema();
   const { id } = await params;
+  if (!(await authorizeBook(id))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   const body = await req.json().catch(() => ({}));
   const shareUrl = (body.shareUrl ?? "").toString();
   if (!shareUrl) {

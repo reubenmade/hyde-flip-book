@@ -27,7 +27,7 @@ export async function generateMetadata({
   const book = await getByToken(token);
   if (!book) return { title: "Not found" };
   return {
-    title: `${book.title} — Hyde`,
+    title: `${book.title} — FlyppBook`,
     openGraph: {
       title: book.title,
       images: book.share_url ? [book.share_url] : undefined,

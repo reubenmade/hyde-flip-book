@@ -7,10 +7,10 @@ type Props = { slug: string; title: string; pageCount: number; token: string | n
 // Persist a lightweight anonymous session id so repeat visits are grouped.
 function getSessionId(): string {
   try {
-    let id = localStorage.getItem("hyde_sid");
+    let id = localStorage.getItem("flypp_sid");
     if (!id) {
       id = Math.random().toString(36).slice(2) + Date.now().toString(36);
-      localStorage.setItem("hyde_sid", id);
+      localStorage.setItem("flypp_sid", id);
     }
     return id;
   } catch {
@@ -66,7 +66,7 @@ export function ViewerClient({ slug, title, pageCount, token }: Props) {
 
   // Persist the furthest page ever logged for this specific link, so re-opening
   // and scrolling to the same (or a shallower) page never logs a duplicate.
-  const depthKey = `hyde_depth_${token ?? slug}`;
+  const depthKey = `flypp_depth_${token ?? slug}`;
 
   // Debounced "furthest page reached" logger: waits until they stop flipping,
   // then logs a single milestone only if it's deeper than anything logged before.
@@ -209,7 +209,7 @@ export function ViewerClient({ slug, title, pageCount, token }: Props) {
       {/* Top bar */}
       <div className="flex items-center justify-between px-5 py-3 text-white/80">
         <div className="text-sm font-medium tracking-tight">
-          Hyde<span className="text-accent">.</span>
+          Flypp<span className="text-accent">Book</span>
           <span className="ml-2 text-white/50 hidden sm:inline">{title}</span>
         </div>
         <div className="text-xs tabular-nums text-white/50">

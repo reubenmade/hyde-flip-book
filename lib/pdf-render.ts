@@ -152,14 +152,8 @@ export async function buildShareImage(
   // Right-hand text column.
   const tx = bookX + bookW + 70;
   ctx.fillStyle = "#14110f";
-  ctx.font = "600 26px ui-sans-serif, system-ui, -apple-system, Helvetica, Arial";
-  ctx.fillText("Hyde", tx, bookY + 30);
-  ctx.fillStyle = "#b3833d";
-  ctx.fillText("•", tx + 62, bookY + 30);
-
-  ctx.fillStyle = "#14110f";
   ctx.font = "700 46px ui-sans-serif, system-ui, -apple-system, Helvetica, Arial";
-  wrapText(ctx, opts.title, tx, bookY + 120, 560, 54, 3);
+  wrapText(ctx, opts.title, tx, bookY + 70, 560, 54, 3);
 
   // "Open doc" pill.
   const pillY = bookY + bookH - 70;

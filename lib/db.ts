@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import bcrypt from "bcryptjs";
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -47,6 +48,27 @@ let schemaReady: Promise<void> | null = null;
 export function ensureSchema(): Promise<void> {
   if (!schemaReady) {
     schemaReady = (async () => {
+      // ── Users & auth ───────────────────────────────────────────────────
+      await sql`
+        CREATE TABLE IF NOT EXISTS users (
+          id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          username      text UNIQUE NOT NULL,
+          email         text,
+          password_hash text NOT NULL,
+          role          text NOT NULL DEFAULT 'user',
+          created_at    timestamptz NOT NULL DEFAULT now(),
+          last_login_at timestamptz
+        )
+      `;
+      await sql`
+        CREATE TABLE IF NOT EXISTS password_resets (
+          token       text PRIMARY KEY,
+          user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          expires_at  timestamptz NOT NULL,
+          used_at     timestamptz
+        )
+      `;
+
       await sql`
         CREATE TABLE IF NOT EXISTS books (
           id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -91,6 +113,30 @@ export function ensureSchema(): Promise<void> {
       await sql`CREATE INDEX IF NOT EXISTS events_created_at_idx ON events(created_at DESC)`;
       await sql`CREATE INDEX IF NOT EXISTS events_recipient_id_idx ON events(recipient_id)`;
       await sql`CREATE INDEX IF NOT EXISTS recipients_book_id_idx ON recipients(book_id)`;
+
+      // ── Per-user ownership (multi-tenant) ──────────────────────────────
+      await sql`ALTER TABLE books ADD COLUMN IF NOT EXISTS owner_id uuid`;
+      await sql`CREATE INDEX IF NOT EXISTS books_owner_id_idx ON books(owner_id)`;
+
+      // Bootstrap / refresh the superuser from environment variables. The env
+      // is the source of truth for this account, so we upsert on every cold
+      // start — changing SUPERUSER_PASSWORD in the environment rotates it.
+      const superUsername = process.env.SUPERUSER_USERNAME;
+      const superPassword = process.env.SUPERUSER_PASSWORD;
+      if (superUsername && superPassword) {
+        const hash = await bcrypt.hash(superPassword, 10);
+        await sql`
+          INSERT INTO users (username, email, password_hash, role)
+          VALUES (${superUsername}, ${process.env.SUPERUSER_EMAIL ?? null}, ${hash}, 'super')
+          ON CONFLICT (username) DO UPDATE
+            SET password_hash = EXCLUDED.password_hash,
+                email         = EXCLUDED.email,
+                role          = 'super'
+        `;
+      }
+      // Note: the superuser never owns books — it exists only to manage users
+      // and view usage. Pre-existing books stay unassigned (owner_id NULL) and
+      // are surfaced to the superuser as unassigned oversight.
     })();
   }
   return schemaReady;
@@ -106,5 +152,16 @@ export type BookRow = {
   cover_url: string | null;
   share_url: string | null;
   status: string;
+  owner_id: string | null;
   created_at: string;
+};
+
+export type UserRow = {
+  id: string;
+  username: string;
+  email: string | null;
+  password_hash: string;
+  role: "user" | "super";
+  created_at: string;
+  last_login_at: string | null;
 };

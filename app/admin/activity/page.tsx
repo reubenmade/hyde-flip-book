@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { sql, ensureSchema } from "@/lib/db";
+import { getSession } from "@/lib/auth";
 import { dateTime } from "@/lib/format";
 import { deviceOf } from "@/lib/device";
 import { actionText } from "@/lib/activity";
@@ -7,7 +9,7 @@ import { AutoRefresh } from "../AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
-async function getStream() {
+async function getStream(uid: string, all: boolean) {
   await ensureSchema();
   return sql`
     SELECT e.type, e.page, e.created_at, e.user_agent,
@@ -16,13 +18,16 @@ async function getStream() {
     FROM events e
     JOIN books b ON b.id = e.book_id
     LEFT JOIN recipients r ON r.id = e.recipient_id
+    WHERE ${all} OR b.owner_id = ${uid}
     ORDER BY e.created_at DESC
     LIMIT 500
   `;
 }
 
 export default async function ActivityPage() {
-  const stream = await getStream();
+  const session = await getSession();
+  if (!session) redirect("/admin/login");
+  const stream = await getStream(session.uid, session.role === "super");
 
   return (
     <div>
@@ -31,7 +36,8 @@ export default async function ActivityPage() {
         <div>
           <h1 className="text-2xl font-semibold text-ink">All activity</h1>
           <p className="text-sm text-muted mt-1">
-            Every open and page-depth milestone across all documents, live.
+            Every open and page-depth milestone across{" "}
+            {session.role === "super" ? "all" : "your"} documents, live.
           </p>
         </div>
         <Link href="/admin" className="text-sm text-muted hover:text-ink">

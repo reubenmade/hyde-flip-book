@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 
-const COOKIE_NAME = "hyde_session";
+const COOKIE_NAME = "flypp_session";
 const secret = new TextEncoder().encode(
   process.env.SESSION_SECRET ?? "dev-insecure-secret-change-me"
 );
@@ -12,10 +12,18 @@ async function authed(req: NextRequest): Promise<boolean> {
   if (!token) return false;
   try {
     const { payload } = await jwtVerify(token, secret);
-    return payload.role === "admin";
+    return typeof payload.uid === "string";
   } catch {
     return false;
   }
+}
+
+// Admin pages that must stay reachable without a session.
+const PUBLIC_ADMIN = ["/admin/login", "/admin/forgot"];
+function isPublicAdmin(pathname: string): boolean {
+  return (
+    PUBLIC_ADMIN.includes(pathname) || pathname.startsWith("/admin/reset")
+  );
 }
 
 export async function proxy(req: NextRequest) {
@@ -23,8 +31,9 @@ export async function proxy(req: NextRequest) {
 
   // Protect the admin UI and the admin-only API surface.
   const isProtected =
-    (pathname.startsWith("/admin") && pathname !== "/admin/login") ||
+    (pathname.startsWith("/admin") && !isPublicAdmin(pathname)) ||
     pathname.startsWith("/api/books") ||
+    pathname.startsWith("/api/users") ||
     pathname.startsWith("/api/blob/put");
 
   if (!isProtected) return NextResponse.next();
@@ -45,5 +54,10 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/books/:path*", "/api/blob/put"],
+  matcher: [
+    "/admin/:path*",
+    "/api/books/:path*",
+    "/api/users/:path*",
+    "/api/blob/put",
+  ],
 };

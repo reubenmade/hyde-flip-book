@@ -23,10 +23,10 @@ export async function generateMetadata({
   const book = await getBook(slug);
   if (!book) return { title: "Not found" };
   return {
-    title: `${book.title} — Hyde`,
+    title: `${book.title} — FlyppBook`,
     description: book.client_name
       ? `A flip book prepared for ${book.client_name}.`
-      : "A flip book by Hyde.",
+      : "A flip book by FlyppBook.",
     openGraph: {
       title: book.title,
       images: book.share_url ? [book.share_url] : undefined,

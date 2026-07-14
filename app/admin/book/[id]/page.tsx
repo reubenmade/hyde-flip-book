@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { sql, ensureSchema } from "@/lib/db";
+import { authorizeBook } from "@/lib/access";
 import { dateTime, timeAgo } from "@/lib/format";
 import { deviceOf } from "@/lib/device";
 import { actionText } from "@/lib/activity";
@@ -62,6 +63,7 @@ export default async function BookPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  if (!(await authorizeBook(id))) notFound();
   const data = await getData(id);
   if (!data) notFound();
   const { book, summary, recipients, stream } = data;

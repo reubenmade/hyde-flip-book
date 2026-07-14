@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { sql, ensureSchema } from "@/lib/db";
+import { getSession } from "@/lib/auth";
 import { timeAgo } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +20,7 @@ type Row = {
   last_view: string | null;
 };
 
-async function getBooks(): Promise<Row[]> {
+async function getBooks(uid: string, all: boolean): Promise<Row[]> {
   await ensureSchema();
   const rows = await sql`
     SELECT
@@ -35,40 +37,70 @@ async function getBooks(): Promise<Row[]> {
              MAX(created_at)                       AS last_view
       FROM events GROUP BY book_id
     ) v ON v.book_id = b.id
+    WHERE ${all} OR b.owner_id = ${uid}
     ORDER BY b.created_at DESC
   `;
   return rows as Row[];
 }
 
+// Share links created in the last 30 days, scoped to the caller's books.
+async function getLinks30d(uid: string, all: boolean): Promise<number> {
+  const rows = await sql`
+    SELECT COUNT(*) AS n
+    FROM recipients r
+    JOIN books b ON b.id = r.book_id
+    WHERE r.created_at > now() - interval '30 days'
+      AND (${all} OR b.owner_id = ${uid})
+  `;
+  return Number(rows[0]?.n ?? 0);
+}
+
 export default async function AdminDashboard() {
-  const books = await getBooks();
+  const session = await getSession();
+  if (!session) redirect("/admin/login");
+  const isSuper = session.role === "super";
+
+  const [books, links30d] = await Promise.all([
+    getBooks(session.uid, isSuper),
+    getLinks30d(session.uid, isSuper),
+  ]);
 
   return (
     <div>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-ink">Flip books</h1>
+          <h1 className="text-2xl font-semibold text-ink">
+            {isSuper ? "All flip books" : "Flip books"}
+          </h1>
           <p className="text-sm text-muted mt-1">
-            {books.length} {books.length === 1 ? "book" : "books"}
+            {books.length} {books.length === 1 ? "book" : "books"} ·{" "}
+            {links30d} {links30d === 1 ? "link" : "links"} in the last 30 days
+            {isSuper && " · oversight"}
           </p>
         </div>
-        <Link
-          href="/admin/upload"
-          className="rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white transition hover:opacity-90"
-        >
-          + New flip book
-        </Link>
+        {!isSuper && (
+          <Link
+            href="/admin/upload"
+            className="rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white transition hover:opacity-90"
+          >
+            + New flip book
+          </Link>
+        )}
       </div>
 
       {books.length === 0 ? (
         <div className="mt-10 rounded-2xl border border-dashed border-line p-12 text-center">
-          <p className="text-muted">No flip books yet.</p>
-          <Link
-            href="/admin/upload"
-            className="mt-4 inline-block rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white"
-          >
-            Upload your first PDF
-          </Link>
+          <p className="text-muted">
+            {isSuper ? "No flip books yet." : "No flip books yet."}
+          </p>
+          {!isSuper && (
+            <Link
+              href="/admin/upload"
+              className="mt-4 inline-block rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white"
+            >
+              Upload your first PDF
+            </Link>
+          )}
         </div>
       ) : (
         <div className="mt-6 grid gap-3">

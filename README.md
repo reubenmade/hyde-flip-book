@@ -1,7 +1,11 @@
-# Hyde Flip Books
+# FlyppBook
 
 Upload a PDF, note the client, and get a polished, trackable online flip book
 plus a one-click "Copy for Gmail" share block. Built to run on **free tiers**.
+
+Multi-user: each account sees only its own books, share links and activity. A
+**superuser** (bootstrapped from env vars) manages accounts and sees usage
+analytics across everyone.
 
 ## How it works
 
@@ -26,7 +30,8 @@ Next.js 16 (App Router) · Neon Postgres · Vercel Blob · pdf.js · page-flip �
 
 ## Local development
 
-1. `cp .env.example .env.local` and fill in the four required values.
+1. `cp .env.example .env.local` and fill in the required values (including the
+   `SUPERUSER_*` credentials you'll first sign in with).
 2. (Optional) `node --env-file=.env.local scripts/init-db.mjs` to create tables
    up front — the app also creates them lazily on first use.
 3. `npm run dev` → http://localhost:3000
@@ -37,8 +42,10 @@ Next.js 16 (App Router) · Neon Postgres · Vercel Blob · pdf.js · page-flip �
    pooled connection string into `DATABASE_URL`.
 2. **Blob**: Vercel dashboard → Storage → create a Blob store (auto-wires
    `BLOB_READ_WRITE_TOKEN` in the project).
-3. **Env vars**: set `ADMIN_PASSWORD` and `SESSION_SECRET`
-   (`openssl rand -base64 32`) in Project → Settings → Environment Variables.
+3. **Env vars**: set `SESSION_SECRET` (`openssl rand -base64 32`),
+   `SUPERUSER_USERNAME` / `SUPERUSER_PASSWORD` / `SUPERUSER_EMAIL`, and
+   (optionally) `RESEND_API_KEY` / `RESEND_FROM` for password-reset emails, in
+   Project → Settings → Environment Variables.
 4. Push the repo and import it in Vercel, or run `vercel --prod`.
 
 ### Cost at ~300 PDFs/year
@@ -50,11 +57,15 @@ Blob (free tier is 1 GB+), Neon rows are tiny, and traffic is low. Expected: **$
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `DATABASE_URL` | ✅ | Neon Postgres connection string |
+| `DATABASE_URL` | ✅ | Postgres connection string (Supabase/Neon/local) |
 | `BLOB_READ_WRITE_TOKEN` | ✅ | Vercel Blob (auto on Vercel) |
-| `ADMIN_PASSWORD` | ✅ | Single shared admin login |
 | `SESSION_SECRET` | ✅ | Signs session cookie + hashes visitor IPs |
-| `NEXT_PUBLIC_BASE_URL` | — | Override share-link origin |
+| `SUPERUSER_USERNAME` | ✅ | Superuser login (manages all accounts) |
+| `SUPERUSER_PASSWORD` | ✅ | Superuser password (env is source of truth) |
+| `SUPERUSER_EMAIL` | — | Superuser email (for password resets) |
+| `RESEND_API_KEY` | — | Resend key for reset emails (else logged to console) |
+| `RESEND_FROM` | — | From address for reset emails |
+| `NEXT_PUBLIC_BASE_URL` | — | Override share-/reset-link origin |
 
 ## Notes on "not downloadable"
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql, ensureSchema } from "@/lib/db";
 import { deleteObjects } from "@/lib/storage";
+import { authorizeBook } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -11,11 +12,11 @@ export async function GET(
 ) {
   await ensureSchema();
   const { id } = await params;
-
-  const bookRows = await sql`SELECT * FROM books WHERE id = ${id}`;
-  if (bookRows.length === 0) {
+  if (!(await authorizeBook(id))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
+
+  const bookRows = await sql`SELECT * FROM books WHERE id = ${id}`;
   const book = bookRows[0];
 
   const summary = await sql`
@@ -53,6 +54,9 @@ export async function DELETE(
 ) {
   await ensureSchema();
   const { id } = await params;
+  if (!(await authorizeBook(id))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
 
   const rows = await sql`SELECT pages, cover_url, share_url FROM books WHERE id = ${id}`;
   if (rows.length > 0) {
